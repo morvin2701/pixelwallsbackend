@@ -4,6 +4,8 @@ const dotenv = require('dotenv');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
 
 // Load environment variables
 dotenv.config();
@@ -41,6 +43,34 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// File path for payment history
+const PAYMENT_HISTORY_FILE = path.join(__dirname, 'payment-history.json');
+
+// Load payment history from file or initialize empty array
+let paymentHistory;
+try {
+  if (fs.existsSync(PAYMENT_HISTORY_FILE)) {
+    const data = fs.readFileSync(PAYMENT_HISTORY_FILE, 'utf8');
+    paymentHistory = JSON.parse(data);
+    console.log('Loaded payment history from file:', paymentHistory.length, 'records');
+  } else {
+    paymentHistory = [];
+  }
+} catch (error) {
+  console.error('Error loading payment history from file:', error);
+  paymentHistory = [];
+}
+
+// Save payment history to file
+const savePaymentHistory = () => {
+  try {
+    fs.writeFileSync(PAYMENT_HISTORY_FILE, JSON.stringify(paymentHistory, null, 2));
+    console.log('Payment history saved to file');
+  } catch (error) {
+    console.error('Error saving payment history to file:', error);
+  }
+};
+
 // Initialize Razorpay instance
 let razorpay;
 try {
@@ -73,7 +103,6 @@ const premiumPlans = {
 };
 
 // In-memory storage for payment history (in a real app, this would be a database)
-let paymentHistory = [];
 
 // Route to create order
 app.post('/create-order', async (req, res) => {
@@ -118,6 +147,7 @@ app.post('/create-order', async (req, res) => {
     };
     
     paymentHistory.push(orderRecord);
+    savePaymentHistory(); // Save to file
     console.log('Payment history updated:', JSON.stringify(paymentHistory, null, 2));
     
     const response = {
@@ -174,6 +204,7 @@ app.post('/verify-payment', async (req, res) => {
         paymentRecord.verifiedAt = new Date().toISOString();
         paymentRecord.razorpay_payment_id = razorpay_payment_id;
         paymentRecord.razorpay_signature = razorpay_signature;
+        savePaymentHistory(); // Save to file
       }
       
       return res.status(400).json({ success: false, error: 'Invalid signature' });
@@ -189,6 +220,7 @@ app.post('/verify-payment', async (req, res) => {
       paymentRecord.verifiedAt = new Date().toISOString();
       paymentRecord.razorpay_payment_id = razorpay_payment_id;
       paymentRecord.razorpay_signature = razorpay_signature;
+      savePaymentHistory(); // Save to file
     }
     
     const response = {
@@ -214,6 +246,33 @@ app.post('/verify-payment', async (req, res) => {
       error: 'Failed to verify payment', 
       details: error.message,
       name: error.name
+    });
+  }
+});
+
+// Route to handle failed payments
+app.post('/payment-failed', (req, res) => {
+  try {
+    console.log('Received payment failed notification:', JSON.stringify(req.body, null, 2));
+    const { razorpay_order_id, error } = req.body;
+    
+    // Update payment history with rejected status
+    const paymentRecord = paymentHistory.find(record => record.id === razorpay_order_id);
+    if (paymentRecord) {
+      paymentRecord.status = 'Rejected';
+      paymentRecord.verifiedAt = new Date().toISOString();
+      paymentRecord.error = error;
+      savePaymentHistory(); // Save to file
+    }
+    
+    console.log('Updated payment history:', JSON.stringify(paymentHistory, null, 2));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error handling failed payment:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to handle failed payment', 
+      details: error.message 
     });
   }
 });
