@@ -3,7 +3,7 @@ services:
     name: pixelwalls-backend
     env: node
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: node server.js
     envVars:
       - key: NODE_VERSION
         value: 18.17.0
