@@ -72,6 +72,9 @@ const premiumPlans = {
   }
 };
 
+// In-memory storage for payment history (in a real app, this would be a database)
+let paymentHistory = [];
+
 // Route to create order
 app.post('/create-order', async (req, res) => {
   try {
@@ -101,6 +104,21 @@ app.post('/create-order', async (req, res) => {
     
     const order = await razorpay.orders.create(options);
     console.log('Order created successfully:', JSON.stringify(order, null, 2));
+    
+    // Store order in payment history
+    const orderRecord = {
+      id: order.id,
+      planId: plan.id,
+      planName: plan.name,
+      amount: plan.amount,
+      currency: plan.currency,
+      status: 'Pending',
+      createdAt: new Date().toISOString(),
+      receipt: receiptId
+    };
+    
+    paymentHistory.push(orderRecord);
+    console.log('Payment history updated:', JSON.stringify(paymentHistory, null, 2));
     
     const response = {
       orderId: order.id,
@@ -148,11 +166,31 @@ app.post('/verify-payment', async (req, res) => {
     
     if (digest !== razorpay_signature) {
       console.error('Invalid signature');
+      
+      // Update payment history with rejected status
+      const paymentRecord = paymentHistory.find(record => record.id === razorpay_order_id);
+      if (paymentRecord) {
+        paymentRecord.status = 'Rejected';
+        paymentRecord.verifiedAt = new Date().toISOString();
+        paymentRecord.razorpay_payment_id = razorpay_payment_id;
+        paymentRecord.razorpay_signature = razorpay_signature;
+      }
+      
       return res.status(400).json({ success: false, error: 'Invalid signature' });
     }
     
     // Signature is valid
     console.log('Payment verification successful');
+    
+    // Update payment history with received status
+    const paymentRecord = paymentHistory.find(record => record.id === razorpay_order_id);
+    if (paymentRecord) {
+      paymentRecord.status = 'Received';
+      paymentRecord.verifiedAt = new Date().toISOString();
+      paymentRecord.razorpay_payment_id = razorpay_payment_id;
+      paymentRecord.razorpay_signature = razorpay_signature;
+    }
+    
     const response = {
       success: true,
       orderId: razorpay_order_id,
@@ -176,6 +214,21 @@ app.post('/verify-payment', async (req, res) => {
       error: 'Failed to verify payment', 
       details: error.message,
       name: error.name
+    });
+  }
+});
+
+// Route to get payment history
+app.get('/payment-history', (req, res) => {
+  try {
+    console.log('Received payment history request');
+    console.log('Current payment history:', JSON.stringify(paymentHistory, null, 2));
+    res.json(paymentHistory);
+  } catch (error) {
+    console.error('Error fetching payment history:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch payment history', 
+      details: error.message 
     });
   }
 });
