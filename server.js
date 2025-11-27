@@ -724,6 +724,28 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Root route - Welcome message with API documentation
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Welcome to the PixelWalls Backend API',
+    version: '1.0.0',
+    description: 'This is the backend API for PixelWalls - an AI-powered wallpaper generation application',
+    endpoints: {
+      'POST /create-order': 'Create a new payment order',
+      'POST /verify-payment': 'Verify a payment',
+      'POST /payment-failed': 'Handle failed payments',
+      'GET /user-payment-history/:userId': 'Get payment history for a user',
+      'GET /user-plan/:userId': 'Get current plan for a user',
+      'POST /register': 'Register a new user',
+      'POST /login': 'Login a user',
+      'GET /test-db': 'Test database connection',
+      'GET /health': 'Health check endpoint',
+      'GET /': 'This welcome message'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // START SERVER - IMPROVED VERSION
 app.listen(PORT, '0.0.0.0', async () => {
   console.log(`=== SERVER STARTING ON PORT ${PORT} ===`);
